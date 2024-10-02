@@ -1,131 +1,112 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<unistd.h>
-#include<wait.h>
-#include<sys/types.h>
-#include<string.h>
+#include <stdio.h>   // Librería estándar de entrada y salida
+#include <stdlib.h>  // Librería para manejo de memoria dinámica, procesos, y otras utilidades
+#include <unistd.h>  // Librería para hacer uso del sistema UNIX, como fork() y exec()
+#include <wait.h>    // Librería para esperar la terminación de procesos hijo
+#include <sys/types.h> // Librería para definir tipos de datos como pid_t (ID del proceso)
+#include <string.h>  // Librería para manipulación de cadenas
 
-int main()
-{
-   // Creamos las variables para tener los nombres de los archivos
-   char *nombreArchivoMatriz = "matriz.txt";
-   char *nombreArchivoResultados = "resultado.txt";
-   
-   ////////////////////////////////////////////////////////////////////////////////////////////////////
-   
-   //En el caso de que existan los archivos, lo que haremos será eliminarlos para que se realice desde 0
-   
-   // Eliminar el archivo si existe
-   
-   remove(nombreArchivoMatriz);
-   remove(nombreArchivoResultados);
-   
-   //////////////////////////////////////  ALMACENAR EN ARCHIVO DE TEXTO LA MATRIZ  ///////////////////////////////////
-   
-   // Creamos la matriz 
-   int matriz[3][9] = {{1,2,3,4,5,6,7,8,9},
-   		       {1,3,5,7,9,11,13,15,17},
-   		       {2,4,6,8,10,12,14,16,18}};
-   
-    // Abrimos un archivo en modo escritura para guardar la matriz
-    FILE *archivo1 = fopen(nombreArchivoMatriz, "w");
-
-    // Verificamos de que se abra correctamente el archivo
-    if (archivo1 == NULL) {
-        fprintf(stderr, "No se pudo abrir el archivo.\n");
-        return 1;  // Salir del programa con código de error
+// Función que se encarga de abrir un archivo en el modo especificado y verificar si se pudo abrir correctamente
+FILE* abrir_archivo(const char* nombre_archivo, const char* modo) {
+    FILE *archivo = fopen(nombre_archivo, modo);  // Abrir el archivo en el modo especificado
+    if (archivo == NULL) {  // Si no se pudo abrir el archivo, muestra un error
+        fprintf(stderr, "No se pudo abrir el archivo %s.\n", nombre_archivo);
+        exit(1);  // Sale del programa con un código de error
     }
+    return archivo;  // Retorna el puntero al archivo abierto
+}
 
-    // Escribimos la matriz en el archivo separado por un espacio
+int main() {
+    // Definimos los nombres de los archivos para almacenar la matriz y los resultados
+    char *nombreArchivoMatriz = "matriz.txt";
+    char *nombreArchivoResultados = "resultado.txt";
+
+    // Eliminamos los archivos anteriores, si existen, para empezar desde cero
+    remove(nombreArchivoMatriz);
+    remove(nombreArchivoResultados);
+
+    // Definimos la matriz que vamos a guardar en el archivo "matriz.txt"
+    int matriz[3][9] = {
+        {1, 2, 3, 4, 5, 6, 7, 8, 9},
+        {1, 3, 5, 7, 9, 11, 13, 15, 17},
+        {2, 4, 6, 8, 10, 12, 14, 16, 18}
+    };
+
+    // Calculamos el tamaño de la fila dinámicamente (cantidad de columnas)
+    int tamano_fila = sizeof(matriz[0]) / sizeof(matriz[0][0]);  // Calcula cuántas columnas tiene la primera fila
+
+    // Abrimos el archivo matriz.txt en modo escritura para almacenar la matriz
+    FILE *archivo_matriz = abrir_archivo(nombreArchivoMatriz, "w");
+
+    // Escribimos la matriz en el archivo de texto, con cada número separado por un espacio
     for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 9; ++j) {
-            fprintf(archivo1, "%d ", matriz[i][j]);
+        for (int j = 0; j < tamano_fila; ++j) {
+            fprintf(archivo_matriz, "%d ", matriz[i][j]);  // Escribimos el número en el archivo
         }
-        fprintf(archivo1, "\n"); // Al final de la primera fila escribimos un salto de linea
+        fprintf(archivo_matriz, "\n");  // Al final de cada fila escribimos un salto de línea
     }
 
-    // Cerrar el archivo
-    fclose(archivo1);
-    
-    ////////////////////////////////////  EL PROCESO PADRE GENERA EL ARCHIVO PARA GUARDAR RESULTADOS  ///////////////////////////
-    
-    // Abrimos un archivo en modo escritura para guardar los resultados de las multiplicaciones
-    FILE *archivo2 = fopen(nombreArchivoResultados, "w");
+    // Cerramos el archivo matriz.txt después de escribir la matriz
+    fclose(archivo_matriz);
 
-    // Verificamos de que se abra correctamente el archivo
-    if (archivo2 == NULL) {
-	fprintf(stderr, "No se pudo abrir el archivo.\n");
-	return 1;  // Salir del programa con código de error
-    }
-	    
-    printf("\nSoy el proceso padre y he generado el archivo txt para guardar los datos de mis hijos\n\n");
-    // Cerramos el archivo para que los hijos lo abran independientemente
-    fclose(archivo2);
-    
-    //////////////////////////////////////  PROCESO PADRE GENERA A LOS PROCESOS HIJOS NECESARIOS  ///////////////////////
+    // El proceso padre crea el archivo donde se guardarán los resultados de las multiplicaciones
+    FILE *archivo_resultados = abrir_archivo(nombreArchivoResultados, "w");
+    printf("\nSoy el proceso padre y he generado el archivo para guardar los resultados de mis hijos\n\n");
+    fclose(archivo_resultados);  // Cerramos el archivo para que luego los hijos lo usen
 
-    // En este bucle generamos cada uno de los procesos hijos según el numero de columnas
-    for (int i = 0; i < 9; ++i) {
-    
-        pid_t pid = fork(); // Creamos el proceso hijo
-        
-        // En este caso el iterador le indicara con la variable i al proceso hijo el numero de columna que debe de enfocarse
-
+    // Proceso padre genera procesos hijos, según el tamaño dinámico de la fila
+    for (int i = 0; i < tamano_fila; ++i) {  // Creamos un proceso hijo por cada columna de la matriz
+        pid_t pid = fork();  // fork() crea un nuevo proceso hijo
         if (pid == -1) {
-            // Error a la hora de crear el proceso
-            perror("\nError al crear el proceso\n");
-      	    exit(-1);
+            // Si fork() falla, mostramos un error y terminamos el programa
+            perror("Error al crear el proceso\n");
+            exit(-1);  // Salir con código de error
         } else if (pid == 0) {
-        
-            //////////////////////////////////////  INSTRUCCIONES QUE REALIZA UN PROCESO HIJO //////////////////////////////
-            
-            
-            // Abrimos el archivo de la matriz para leerlo
-            FILE *archivo = fopen(nombreArchivoMatriz, "r");
+            // Código que ejecuta cada proceso hijo
 
-            if (archivo == NULL) {
-                fprintf(stderr, "No se pudo abrir el archivo.\n");
-                return 1;
+            // Abrimos el archivo matriz.txt para leer los valores
+            FILE *archivo_matriz_hijo = abrir_archivo(nombreArchivoMatriz, "r");
+
+            int multiplicacion = 1;  // Variable para almacenar el resultado de la multiplicación de una columna
+            int numero;  // Variable para almacenar el número leído del archivo
+            int contador = 0;  // Contador para identificar la columna actual
+
+            // Leemos el archivo número por número: El bucle while sigue ejecutándose mientras fscanf siga leyendo correctamente números enteros del archivo
+            while (fscanf(archivo_matriz_hijo, "%d", &numero) == 1) {
+                if (contador == tamano_fila) {  // Si hemos alcanzado el final de una fila (es decir, leído todos sus elementos)
+                    contador = 0;  // Reiniciamos el contador a 0 para comenzar a procesar la siguiente fila
+                }
+                if (contador == i) {  // Si el contador indica que estamos en la columna correspondiente a este proceso hijo
+                    multiplicacion *= numero;  // Multiplicamos el valor actual de la columna por el acumulado de la variable 'multiplicacion'
+                }
+                contador++;  // Incrementamos el contador para pasar al siguiente número en la fila
             }
 
-            int multiplicacion = 1; // Variable para guardar el resultado de la multiplicacion
-            int numero; // Variable para leer el numero del archivo
-	    int contador = 0; // Variable que nos permitira saber el numero de la columna en la que estemos
-	    
-	    // Recorremos el archivo de texto mientras podamos leer un valor entero
-	    while (fscanf(archivo, "%d", &numero) == 1){
-	        if(contador == 9) // Si el contador es igual a 9, reinicia contador para el salto de linea
-	            contador = 0;  // Igualamos a 0 contador
-	        
-	        if(contador == i) // Si el contador es igual al contador, entonces es el valor que esperamos
-	            multiplicacion *= numero; // Multiplicamos el valor actual con la acumulacion
+            // Mostramos el resultado de la multiplicación en consola
+            printf("\nMultiplicación columna %d es %d\n", i + 1, multiplicacion);
 
-	        contador++; // Aumentamos el contador para saber que nos movemos a la siguiente columna de la matriz
-	    }
+            // Cerramos el archivo de la matriz
+            fclose(archivo_matriz_hijo);
 
-            printf("\nMultiplicacion columna %d es %d\n", i + 1, multiplicacion); // Imprmimos el valor de la multiplicacion en consola
-            fclose(archivo); // Cerramos el archivo de la matriz
+            // Abrimos el archivo resultado.txt en modo adjuntar para escribir el resultado de este hijo
+            FILE *archivo_resultados_hijo = abrir_archivo(nombreArchivoResultados, "a");
 
-	    // Abrimos el archivo de resultados creado por el proceso padre para agregarle elementos al final
-            FILE *archivo_resultados = fopen(nombreArchivoResultados, "a");
-            if (archivo_resultados == NULL) {
-                fprintf(stderr, "No se pudo abrir el archivo de resultados.\n");
-                return 1;
-            }
-            
-            fprintf(archivo_resultados, "Resultado columna %d: %d\n", i + 1, multiplicacion); // Guardamos el hijo y el valor calculado
-            fclose(archivo_resultados); // Cerramos el archivo de resultados
+            // Escribimos el resultado de la multiplicación en el archivo
+            fprintf(archivo_resultados_hijo, "Resultado columna %d: %d\n", i + 1, multiplicacion);
 
-            exit(0); // Terminamos el proceso hijos
+            // Cerramos el archivo resultados
+            fclose(archivo_resultados_hijo);
+
+            exit(0);  // Terminamos el proceso hijo
         }
     }
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // Esperaramos a que los hijos terminen
-    for (int i = 0; i < 9; ++i) {
-        wait(NULL);
+    // Esperamos a que todos los procesos hijos terminen
+    for (int i = 0; i < tamano_fila; ++i) {
+        wait(NULL);  // El proceso padre espera a cada hijo
     }
 
-    printf("\nTodos los hijos han terminado. Proceso padre finalizado.\n"); // Mostramos en consola que se han terminado todos los procesos hijos
+    // Indicamos que todos los hijos han terminado
+    printf("\nTodos los hijos han terminado. Proceso padre finalizado.\n");
+
+    return 0;  // Salida exitosa del programa
 }
